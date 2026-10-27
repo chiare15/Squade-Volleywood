@@ -724,7 +724,7 @@
       event.target.value = '';
     }
 
-    function parseRawText() {
+ async function parseRawText() {
       const val = document.getElementById('raw-text-input').value.trim();
       if (!val) {
         showToast('Inserisci testo da estrarre.', 'warning');
@@ -732,15 +732,21 @@
       }
       const parsed = parseInputText(val);
       if (parsed.length > 0) {
-        state.players = [...state.players, ...parsed];
-        saveStateToStorage();
-        renderPlayersList();
+        for (const p of parsed) {
+          const id = 'p_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          await setDoc(doc(window.db, "players", id), {
+            id: id,
+            name: p.name,
+            level: p.level,
+            selected: true
+          });
+        }
         document.getElementById('raw-text-input').value = '';
-        showToast(`Salvati ${parsed.length} nuovi giocatori nel database!`, 'success');
+        showToast(`Salvati ${parsed.length} nuovi giocatori nel Cloud!`, 'success');
       }
     }
 
-    function addSinglePlayer() {
+    async function addSinglePlayer() {
       const name = document.getElementById('quick-name').value.trim();
       const level = parseFloat(document.getElementById('quick-level').value);
 
@@ -749,17 +755,16 @@
         return;
       }
 
-      state.players.push({
-        id: Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+      const id = 'p_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      await setDoc(doc(window.db, "players", id), {
+        id: id,
         name: name,
         level: Math.max(1, Math.min(10, level)),
         selected: true
       });
 
-      saveStateToStorage();
-      renderPlayersList();
       document.getElementById('quick-name').value = '';
-      showToast(`Giocatore ${name} salvato nel DB!`, 'success');
+      showToast(`Giocatore ${name} salvato nel Cloud!`, 'success');
     }
 
     function loadSampleData(notify = true) {
