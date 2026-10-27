@@ -461,30 +461,32 @@
     };
 
     // Ascolta in tempo reale i dati sul cloud Firebase
-    function initRealtimeSync() {
-      db.collection("volleyData").doc("mainState")
-        .onSnapshot((doc) => {
-          if (doc.exists) {
-            const data = doc.data();
-            state.players = data.players || [];
-            state.history = data.history || [];
-            
-            if (state.players.length === 0) {
-              loadSampleData(false);
-            } else {
-              renderPlayersList();
-              renderHistoryList();
-            }
-            updateDbStatusLabel("Cloud Sincronizzato 🟢");
-          } else {
-            // Se il documento non esiste ancora, carica dati d'esempio
-            loadSampleData(false);
-          }
-        }, (error) => {
-          console.error("Errore di sincronizzazione Cloud:", error);
-          updateDbStatusLabel("Errore Connessione Cloud 🔴");
-        });
-    }
+function initRealtimeSync() {
+  db.collection("volleyData").doc("mainState")
+    .onSnapshot((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        // Se non esiste ancora l'array players nel cloud, inizializzalo vuoto []
+        state.players = data.players || [];
+        state.history = data.history || [];
+        
+        renderPlayersList();
+        renderHistoryList();
+        updateDbStatusLabel("Cloud Sincronizzato 🟢");
+      } else {
+        // Se il documento non esiste proprio sul cloud, crealo vuoto
+        state.players = [];
+        state.history = [];
+        saveStateToStorage();
+        renderPlayersList();
+        renderHistoryList();
+        updateDbStatusLabel("Cloud Sincronizzato 🟢");
+      }
+    }, (error) => {
+      console.error("Errore di sincronizzazione Cloud:", error);
+      updateDbStatusLabel("Errore Connessione Cloud 🔴");
+    });
+}
 
     // Salva lo stato su Firebase (si aggiorna istantaneamente su tutti i dispositivi)
     function saveStateToStorage() {
