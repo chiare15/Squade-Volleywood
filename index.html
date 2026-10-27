@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VolleyBalancer Pro - Gestione &amp; Storico Squadre Pallavolo</title>
+  <title>VolleyBalancer Pro - Google Drive Sync</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -52,9 +52,9 @@
         </div>
         <div>
           <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            VolleyBalancer <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full">Pro DB</span>
+            VolleyBalancer <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full">Drive Cloud</span>
           </h1>
-          <p class="text-xs text-slate-400 hidden sm:block">Gestione giocatori, storico partite e bilanciamento squadre</p>
+          <p class="text-xs text-slate-400 hidden sm:block">Gestione giocatori e bilanciamento squadre sincronizzato su Google Drive</p>
         </div>
       </div>
 
@@ -73,6 +73,10 @@
 
       <!-- Quick actions -->
       <div class="flex items-center space-x-2">
+        <button onclick="fetchDriveData()" class="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-blue-400 border border-blue-500/30 rounded-lg transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span class="hidden md:inline">Aggiorna</span>
+        </button>
         <button onclick="loadSampleData(true)" class="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-orange-400 border border-orange-500/30 rounded-lg transition-all flex items-center gap-1.5">
           <i class="fa-solid fa-wand-magic-sparkles"></i>
           <span class="hidden md:inline">Dati Prova</span>
@@ -154,7 +158,7 @@
                 <i class="fa-solid fa-users text-blue-400"></i>
                 <span>Database Giocatori (<span id="selected-count">0</span>)</span>
               </h3>
-              <p class="text-[11px] text-slate-400" id="db-status-label">Stato DB: Inizializzazione...</p>
+              <p class="text-[11px] text-slate-400" id="db-status-label">Connessione a Google Drive...</p>
             </div>
             <div class="flex space-x-1">
               <button onclick="toggleSelectAll(true)" class="text-[10px] px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded">Tutti</button>
@@ -367,7 +371,7 @@
 
           <div class="flex items-center space-x-2 text-xs text-slate-400">
             <input type="checkbox" id="import-merge-option" class="accent-orange-500 rounded" checked>
-            <label for="import-merge-option" class="cursor-pointer">Unisci senza creare duplicati (consigliato)</label>
+            <label for="import-merge-option" class="cursor-pointer">Unisci senza duplicati</label>
           </div>
         </div>
 
@@ -411,9 +415,9 @@
   <!-- Footer -->
   <footer class="bg-slate-950 border-t border-slate-900 py-4 mt-auto">
     <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-2">
-      <p>VolleyBalancer Pro &copy; 2026 - Database locale persistente in IndexedDB.</p>
+      <p>VolleyBalancer Pro &copy; 2026 - Centralizzato con Google Drive API Proxy.</p>
       <div class="flex items-center space-x-4">
-        <span class="flex items-center gap-1"><i class="fa-solid fa-database text-emerald-400"></i> Local Storage / IndexedDB</span>
+        <span class="flex items-center gap-1"><i class="fa-brands fa-google-drive text-emerald-400"></i> Google Drive Synced</span>
       </div>
     </div>
   </footer>
@@ -421,11 +425,9 @@
   <!-- Javascript Application Code -->
   <script>
     // ==========================================
-    // INDEXED DB / LOCAL STORAGE ENGINE
+    // CONFIGURAZIONE GOOGLE APPS SCRIPT URL
     // ==========================================
-    const DB_NAME = "VolleyBalancerDB";
-    const DB_VERSION = 1;
-    let dbInstance = null;
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyrC2lneVjPdUQAJZoGVXuUwFUUR2vEAfecyoIbNTOMSUUfd3nXXf8K7rn2L9Sa7rmF/exec";
 
     let state = {
       players: [],
@@ -444,114 +446,58 @@
     ];
 
     window.onload = function() {
-      initDatabase().then(() => {
-        loadDataFromStorage();
-      }).catch(err => {
-        console.warn("IndexedDB fallback on LocalStorage", err);
-        loadFromLocalStorageFallback();
-      });
+      fetchDriveData();
+      // Polling automatico ogni 15 secondi per mantenere i dati sincronizzati in tempo reale
+      setInterval(fetchDriveData, 15000);
     };
 
-    function initDatabase() {
-      return new Promise((resolve, reject) => {
-        if (!window.indexedDB) {
-          reject("IndexedDB not supported");
-          return;
-        }
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = function(e) {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains("players")) {
-            db.createObjectStore("players", { keyPath: "id" });
-          }
-          if (!db.objectStoreNames.contains("history")) {
-            db.createObjectStore("history", { keyPath: "id" });
-          }
-        };
-        request.onsuccess = function(e) {
-          dbInstance = e.target.result;
-          updateDbStatusLabel("IndexedDB (Attivo 🟢)");
-          resolve(dbInstance);
-        };
-        request.onerror = function(e) {
-          reject(e);
-        };
-      });
-    }
+    // ==========================================
+    // GOOGLE DRIVE SYNC ENGINE
+    // ==========================================
+    async function fetchDriveData() {
+      updateDbStatusLabel("Sincronizzazione in corso...");
+      try {
+        const response = await fetch(APPS_SCRIPT_URL);
+        const data = await response.json();
+        
+        if (data.error) throw new Error(data.error);
 
-    async function loadDataFromStorage() {
-      if (dbInstance) {
-        try {
-          const players = await getAllFromStore("players");
-          const history = await getAllFromStore("history");
+        state.players = data.players || [];
+        state.history = data.history || [];
 
-          state.players = players || [];
-          state.history = history || [];
-
-          renderPlayersList();
-          renderHistoryList();
-        } catch (e) {
-          loadFromLocalStorageFallback();
-        }
-      } else {
-        loadFromLocalStorageFallback();
+        renderPlayersList();
+        renderHistoryList();
+        updateDbStatusLabel("Google Drive Sync (Attivo 🟢)");
+      } catch (err) {
+        console.error("Errore fetch Drive:", err);
+        updateDbStatusLabel("Errore Connessione Drive 🔴");
       }
     }
 
-    function saveStateToStorage() {
-      if (dbInstance) {
-        clearStore("players").then(() => {
-          state.players.forEach(p => addToStore("players", p));
+    async function saveStateToStorage() {
+      updateDbStatusLabel("Salvataggio su Drive...");
+      try {
+        const response = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(state)
         });
-        clearStore("history").then(() => {
-          state.history.forEach(h => addToStore("history", h));
-        });
-      }
-      localStorage.setItem("volley_balancer_state", JSON.stringify(state));
-    }
-
-    function loadFromLocalStorageFallback() {
-      updateDbStatusLabel("LocalStorage (Fallback)");
-      const saved = localStorage.getItem("volley_balancer_state");
-      if (saved) {
-        try {
-          state = JSON.parse(saved);
-        } catch (e) {
-          console.error(e);
+        const resJson = await response.json();
+        
+        if (resJson.status === "success") {
+          updateDbStatusLabel("Google Drive Sync (Attivo 🟢)");
+        } else {
+          throw new Error("Salvataggio fallito");
         }
+      } catch (err) {
+        console.error("Errore salvataggio Drive:", err);
+        updateDbStatusLabel("Errore Salvataggio 🔴");
+        showToast("Errore durante il salvataggio su Drive", "error");
       }
-      renderPlayersList();
-      renderHistoryList();
     }
 
     function updateDbStatusLabel(statusText) {
       document.getElementById("db-status-label").innerText = `DB: ${statusText}`;
-    }
-
-    function getAllFromStore(storeName) {
-      return new Promise((resolve, reject) => {
-        const tx = dbInstance.transaction(storeName, "readonly");
-        const store = tx.objectStore(storeName);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    function addToStore(storeName, item) {
-      const tx = dbInstance.transaction(storeName, "readwrite");
-      const store = tx.objectStore(storeName);
-      store.put(item);
-    }
-
-    function clearStore(storeName) {
-      return new Promise((resolve, reject) => {
-        const tx = dbInstance.transaction(storeName, "readwrite");
-        const store = tx.objectStore(storeName);
-        const req = store.clear();
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
     }
 
     // ==========================================
@@ -570,9 +516,7 @@
           content.classList.add('hidden');
         }
       });
-      if (tabName === 'history') {
-        renderHistoryList();
-      }
+      if (tabName === 'history') renderHistoryList();
     }
 
     function switchInputTab(tabName) {
@@ -644,7 +588,6 @@
 
       let added = 0;
       samplePlayers.forEach(sp => {
-        // Aggiunge solo se non esiste già un giocatore con lo stesso nome
         if (!state.players.some(p => p.name.toLowerCase() === sp.name.toLowerCase())) {
           state.players.push(sp);
           added++;
@@ -653,11 +596,11 @@
 
       saveStateToStorage();
       renderPlayersList();
-      if (notify) showToast(`Caricati ${added} giocatori di prova (${samplePlayers.length - added} già esistenti ignorati).`);
+      if (notify) showToast(`Caricati ${added} giocatori di prova su Drive!`);
     }
 
     // ==========================================
-    // PLAYER DATABASE MANAGEMENT (CON ANTI-DUPLICATO)
+    // PLAYER DATABASE MANAGEMENT
     // ==========================================
     function renderPlayersList() {
       const container = document.getElementById("players-list-container");
@@ -741,7 +684,6 @@
         return;
       }
 
-      // Controllo anti-duplicato per nome
       const exists = state.players.some(p => p.name.toLowerCase() === name.toLowerCase());
       if (exists) {
         showToast(`Il giocatore "${name}" è già presente nel database!`, "error");
@@ -760,7 +702,7 @@
       renderPlayersList();
 
       nameInput.value = "";
-      showToast(`Giocatore "${name}" aggiunto con successo!`);
+      showToast(`Giocatore "${name}" salvato su Drive!`);
     }
 
     function parseRawText() {
@@ -791,7 +733,6 @@
         }
 
         if (name) {
-          // Controlla se esiste già un giocatore con lo stesso nome
           const exists = state.players.some(p => p.name.toLowerCase() === name.toLowerCase());
           if (!exists) {
             state.players.push({
@@ -1050,7 +991,7 @@
       state.history.unshift(matchRecord);
       saveStateToStorage();
       renderHistoryList();
-      showToast("Partita salvata nello storico con successo!");
+      showToast("Partita salvata nello storico Drive!");
     }
 
     function renderHistoryList() {
@@ -1166,7 +1107,7 @@
     }
 
     // ==========================================
-    // BACKUP & RESTORE JSON (CON ANTI-DUPLICATO)
+    // BACKUP & RESTORE JSON
     // ==========================================
     function exportDatabaseJSON() {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
@@ -1194,7 +1135,6 @@
           if (merge) {
             let added = 0;
             imported.players.forEach(impP => {
-              // Aggiungi solo se non esiste già un giocatore con lo stesso nome
               if (!state.players.some(p => p.name.toLowerCase() === impP.name.toLowerCase())) {
                 state.players.push(impP);
                 added++;
@@ -1203,7 +1143,7 @@
             if (imported.history) {
               state.history = [...state.history, ...imported.history];
             }
-            showToast(`Importazione completata: aggiunti ${added} nuovi giocatori senza duplicati.`);
+            showToast(`Aggiunti ${added} giocatori da file backup.`);
           } else {
             state.players = imported.players || [];
             state.history = imported.history || [];
