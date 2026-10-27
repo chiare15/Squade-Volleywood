@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VolleyBalancer Pro - Cloud Realtime</title>
+  <title>VolleyBalancer Pro - Gestione &amp; Storico Squadre Pallavolo</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -33,10 +33,6 @@
   <!-- HTML2PDF Library per export PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
   <style>
     body { font-family: 'Inter', sans-serif; }
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -56,9 +52,9 @@
         </div>
         <div>
           <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            VolleyBalancer <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full">Cloud Sync</span>
+            VolleyBalancer <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full">Pro DB</span>
           </h1>
-          <p class="text-xs text-slate-400 hidden sm:block">Gestione giocatori, storico partite e bilanciamento cloud in tempo reale</p>
+          <p class="text-xs text-slate-400 hidden sm:block">Gestione giocatori, storico partite e bilanciamento squadre</p>
         </div>
       </div>
 
@@ -158,7 +154,7 @@
                 <i class="fa-solid fa-users text-blue-400"></i>
                 <span>Database Giocatori (<span id="selected-count">0</span>)</span>
               </h3>
-              <p class="text-[11px] text-slate-400" id="db-status-label">Stato DB: Connessione cloud...</p>
+              <p class="text-[11px] text-slate-400" id="db-status-label">Stato DB: Inizializzazione...</p>
             </div>
             <div class="flex space-x-1">
               <button onclick="toggleSelectAll(true)" class="text-[10px] px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded">Tutti</button>
@@ -370,8 +366,8 @@
           </div>
 
           <div class="flex items-center space-x-2 text-xs text-slate-400">
-            <input type="checkbox" id="import-merge-option" class="accent-orange-500 rounded">
-            <label for="import-merge-option" class="cursor-pointer">Unisci con i dati attuali (non sovrascrivere)</label>
+            <input type="checkbox" id="import-merge-option" class="accent-orange-500 rounded" checked>
+            <label for="import-merge-option" class="cursor-pointer">Unisci senza creare duplicati (consigliato)</label>
           </div>
         </div>
 
@@ -415,9 +411,9 @@
   <!-- Footer -->
   <footer class="bg-slate-950 border-t border-slate-900 py-4 mt-auto">
     <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-2">
-      <p>VolleyBalancer Pro &copy; 2026 - Database Cloud in Tempo Reale (Firebase Firestore).</p>
+      <p>VolleyBalancer Pro &copy; 2026 - Database locale persistente in IndexedDB.</p>
       <div class="flex items-center space-x-4">
-        <span class="flex items-center gap-1"><i class="fa-solid fa-cloud text-emerald-400"></i> Firebase Cloud Sync</span>
+        <span class="flex items-center gap-1"><i class="fa-solid fa-database text-emerald-400"></i> Local Storage / IndexedDB</span>
       </div>
     </div>
   </footer>
@@ -425,20 +421,11 @@
   <!-- Javascript Application Code -->
   <script>
     // ==========================================
-    // CONFIGURAZIONE FIREBASE CLOUD FIRESTORE
+    // INDEXED DB / LOCAL STORAGE ENGINE
     // ==========================================
-    const firebaseConfig = {
-      apiKey: "INSERISCI_LA_TUA_API_KEY",
-      authDomain: "tuo-progetto.firebaseapp.com",
-      projectId: "tuo-progetto",
-      storageBucket: "tuo-progetto.appspot.com",
-      messagingSenderId: "TUA_MESSAGING_SENDER_ID",
-      appId: "TUA_APP_ID"
-    };
-
-    // Inizializzazione Firebase
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    const DB_NAME = "VolleyBalancerDB";
+    const DB_VERSION = 1;
+    let dbInstance = null;
 
     let state = {
       players: [],
@@ -457,50 +444,114 @@
     ];
 
     window.onload = function() {
-      initRealtimeSync();
+      initDatabase().then(() => {
+        loadDataFromStorage();
+      }).catch(err => {
+        console.warn("IndexedDB fallback on LocalStorage", err);
+        loadFromLocalStorageFallback();
+      });
     };
 
-    // Ascolta in tempo reale i dati sul cloud Firebase
-function initRealtimeSync() {
-  db.collection("volleyData").doc("mainState")
-    .onSnapshot((doc) => {
-      if (doc.exists) {
-        const data = doc.data();
-        // Se non esiste ancora l'array players nel cloud, inizializzalo vuoto []
-        state.players = data.players || [];
-        state.history = data.history || [];
-        
-        renderPlayersList();
-        renderHistoryList();
-        updateDbStatusLabel("Cloud Sincronizzato 🟢");
-      } else {
-        // Se il documento non esiste proprio sul cloud, crealo vuoto
-        state.players = [];
-        state.history = [];
-        saveStateToStorage();
-        renderPlayersList();
-        renderHistoryList();
-        updateDbStatusLabel("Cloud Sincronizzato 🟢");
-      }
-    }, (error) => {
-      console.error("Errore di sincronizzazione Cloud:", error);
-      updateDbStatusLabel("Errore Connessione Cloud 🔴");
-    });
-}
-
-    // Salva lo stato su Firebase (si aggiorna istantaneamente su tutti i dispositivi)
-    function saveStateToStorage() {
-      db.collection("volleyData").doc("mainState").set({
-        players: state.players,
-        history: state.history
-      }).catch((error) => {
-        console.error("Errore di salvataggio sul cloud: ", error);
-        showToast("Errore di salvataggio cloud", "error");
+    function initDatabase() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+          reject("IndexedDB not supported");
+          return;
+        }
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = function(e) {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains("players")) {
+            db.createObjectStore("players", { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains("history")) {
+            db.createObjectStore("history", { keyPath: "id" });
+          }
+        };
+        request.onsuccess = function(e) {
+          dbInstance = e.target.result;
+          updateDbStatusLabel("IndexedDB (Attivo 🟢)");
+          resolve(dbInstance);
+        };
+        request.onerror = function(e) {
+          reject(e);
+        };
       });
+    }
+
+    async function loadDataFromStorage() {
+      if (dbInstance) {
+        try {
+          const players = await getAllFromStore("players");
+          const history = await getAllFromStore("history");
+
+          state.players = players || [];
+          state.history = history || [];
+
+          renderPlayersList();
+          renderHistoryList();
+        } catch (e) {
+          loadFromLocalStorageFallback();
+        }
+      } else {
+        loadFromLocalStorageFallback();
+      }
+    }
+
+    function saveStateToStorage() {
+      if (dbInstance) {
+        clearStore("players").then(() => {
+          state.players.forEach(p => addToStore("players", p));
+        });
+        clearStore("history").then(() => {
+          state.history.forEach(h => addToStore("history", h));
+        });
+      }
+      localStorage.setItem("volley_balancer_state", JSON.stringify(state));
+    }
+
+    function loadFromLocalStorageFallback() {
+      updateDbStatusLabel("LocalStorage (Fallback)");
+      const saved = localStorage.getItem("volley_balancer_state");
+      if (saved) {
+        try {
+          state = JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      renderPlayersList();
+      renderHistoryList();
     }
 
     function updateDbStatusLabel(statusText) {
       document.getElementById("db-status-label").innerText = `DB: ${statusText}`;
+    }
+
+    function getAllFromStore(storeName) {
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(storeName, "readonly");
+        const store = tx.objectStore(storeName);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function addToStore(storeName, item) {
+      const tx = dbInstance.transaction(storeName, "readwrite");
+      const store = tx.objectStore(storeName);
+      store.put(item);
+    }
+
+    function clearStore(storeName) {
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
     }
 
     // ==========================================
@@ -591,13 +642,22 @@ function initRealtimeSync() {
         { id: 'p12', name: 'Federica Rinaldi', level: 6.0, selected: true }
       ];
 
-      state.players = samplePlayers;
+      let added = 0;
+      samplePlayers.forEach(sp => {
+        // Aggiunge solo se non esiste già un giocatore con lo stesso nome
+        if (!state.players.some(p => p.name.toLowerCase() === sp.name.toLowerCase())) {
+          state.players.push(sp);
+          added++;
+        }
+      });
+
       saveStateToStorage();
-      if (notify) showToast("Caricati 12 giocatori di prova sul Cloud!");
+      renderPlayersList();
+      if (notify) showToast(`Caricati ${added} giocatori di prova (${samplePlayers.length - added} già esistenti ignorati).`);
     }
 
     // ==========================================
-    // PLAYER DATABASE MANAGEMENT
+    // PLAYER DATABASE MANAGEMENT (CON ANTI-DUPLICATO)
     // ==========================================
     function renderPlayersList() {
       const container = document.getElementById("players-list-container");
@@ -617,7 +677,7 @@ function initRealtimeSync() {
       document.getElementById("selected-count").innerText = `${selectedCount}/${state.players.length}`;
 
       if (filtered.length === 0) {
-        container.innerHTML = `<div class="text-center py-6 text-slate-500 text-xs">Nessun giocatore trovato.</div>`;
+        container.innerHTML = `<div class="text-center py-6 text-slate-500 text-xs">Nessun giocatore trovato nel database.</div>`;
         return;
       }
 
@@ -646,12 +706,14 @@ function initRealtimeSync() {
       if (p) {
         p.selected = !p.selected;
         saveStateToStorage();
+        renderPlayersList();
       }
     }
 
     function toggleSelectAll(status) {
       state.players.forEach(p => p.selected = status);
       saveStateToStorage();
+      renderPlayersList();
       showToast(status ? "Tutti i giocatori selezionati" : "Selezione azzerata", "info");
     }
 
@@ -659,6 +721,7 @@ function initRealtimeSync() {
       if (confirm("Sei sicuro di voler svuotare l'intero database dei giocatori?")) {
         state.players = [];
         saveStateToStorage();
+        renderPlayersList();
         showToast("Database giocatori svuotato", "info");
       }
     }
@@ -678,6 +741,13 @@ function initRealtimeSync() {
         return;
       }
 
+      // Controllo anti-duplicato per nome
+      const exists = state.players.some(p => p.name.toLowerCase() === name.toLowerCase());
+      if (exists) {
+        showToast(`Il giocatore "${name}" è già presente nel database!`, "error");
+        return;
+      }
+
       const newPlayer = {
         id: 'p_' + Date.now() + Math.random().toString(36).substr(2, 4),
         name: name,
@@ -687,8 +757,10 @@ function initRealtimeSync() {
 
       state.players.push(newPlayer);
       saveStateToStorage();
+      renderPlayersList();
+
       nameInput.value = "";
-      showToast(`Giocatore "${name}" aggiunto al Cloud!`);
+      showToast(`Giocatore "${name}" aggiunto con successo!`);
     }
 
     function parseRawText() {
@@ -700,6 +772,7 @@ function initRealtimeSync() {
 
       const lines = raw.split('\n');
       let addedCount = 0;
+      let skippedCount = 0;
 
       lines.forEach(line => {
         let cleanLine = line.trim();
@@ -718,19 +791,26 @@ function initRealtimeSync() {
         }
 
         if (name) {
-          state.players.push({
-            id: 'p_' + Date.now() + Math.random().toString(36).substr(2, 4),
-            name: name,
-            level: level,
-            selected: true
-          });
-          addedCount++;
+          // Controlla se esiste già un giocatore con lo stesso nome
+          const exists = state.players.some(p => p.name.toLowerCase() === name.toLowerCase());
+          if (!exists) {
+            state.players.push({
+              id: 'p_' + Date.now() + Math.random().toString(36).substr(2, 4),
+              name: name,
+              level: level,
+              selected: true
+            });
+            addedCount++;
+          } else {
+            skippedCount++;
+          }
         }
       });
 
       saveStateToStorage();
+      renderPlayersList();
       document.getElementById("raw-text-input").value = "";
-      showToast(`Aggiunti ${addedCount} giocatori al Cloud!`);
+      showToast(`Aggiunti ${addedCount} nuovi giocatori (${skippedCount} duplicati ignorati).`);
     }
 
     function handleFileUpload(event) {
@@ -785,8 +865,9 @@ function initRealtimeSync() {
         p.name = name;
         p.level = Math.max(1, Math.min(10, level));
         saveStateToStorage();
+        renderPlayersList();
         closeEditModal();
-        showToast("Giocatore aggiornato nel Cloud!");
+        showToast("Giocatore aggiornato con successo!");
       }
     }
 
@@ -794,6 +875,7 @@ function initRealtimeSync() {
       if (confirm("Eliminare questo giocatore dal database?")) {
         state.players = state.players.filter(x => x.id !== id);
         saveStateToStorage();
+        renderPlayersList();
         showToast("Giocatore eliminato", "info");
       }
     }
@@ -967,7 +1049,8 @@ function initRealtimeSync() {
 
       state.history.unshift(matchRecord);
       saveStateToStorage();
-      showToast("Partita salvata nello storico cloud!");
+      renderHistoryList();
+      showToast("Partita salvata nello storico con successo!");
     }
 
     function renderHistoryList() {
@@ -1026,6 +1109,7 @@ function initRealtimeSync() {
       if (confirm("Eliminare questa partita dallo storico?")) {
         state.history = state.history.filter(x => x.id !== id);
         saveStateToStorage();
+        renderHistoryList();
         showToast("Partita rimossa dallo storico", "info");
       }
     }
@@ -1034,6 +1118,7 @@ function initRealtimeSync() {
       if (confirm("Vuoi svuotare tutto lo storico delle partite?")) {
         state.history = [];
         saveStateToStorage();
+        renderHistoryList();
         showToast("Storico azzerato", "info");
       }
     }
@@ -1080,6 +1165,9 @@ function initRealtimeSync() {
       });
     }
 
+    // ==========================================
+    // BACKUP & RESTORE JSON (CON ANTI-DUPLICATO)
+    // ==========================================
     function exportDatabaseJSON() {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
       const downloadAnchor = document.createElement('a');
@@ -1104,21 +1192,27 @@ function initRealtimeSync() {
           const merge = document.getElementById("import-merge-option").checked;
 
           if (merge) {
+            let added = 0;
             imported.players.forEach(impP => {
+              // Aggiungi solo se non esiste già un giocatore con lo stesso nome
               if (!state.players.some(p => p.name.toLowerCase() === impP.name.toLowerCase())) {
                 state.players.push(impP);
+                added++;
               }
             });
             if (imported.history) {
               state.history = [...state.history, ...imported.history];
             }
+            showToast(`Importazione completata: aggiunti ${added} nuovi giocatori senza duplicati.`);
           } else {
             state.players = imported.players || [];
             state.history = imported.history || [];
+            showToast("Database ripristinato con successo!");
           }
 
           saveStateToStorage();
-          showToast("Database importato e sincronizzato sul Cloud!");
+          renderPlayersList();
+          renderHistoryList();
         } catch (err) {
           showToast("Errore: file JSON non valido o corrotto.", "error");
         }
