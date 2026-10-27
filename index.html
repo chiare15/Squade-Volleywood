@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VolleyBalancer Pro - Gestione &amp; Storico Squadre Pallavolo</title>
+  <title>VolleyBalancer Pro - Cloud Edition</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -30,7 +30,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- HTML2PDF Library per export PDF -->
+  <!-- HTML2PDF Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <style>
@@ -56,7 +56,10 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
 
-  <!-- Navigation Bar -->
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- Header / Navbar -->
   <header class="bg-slate-900/90 border-b border-slate-800 shadow-xl sticky top-0 z-40 backdrop-blur-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between flex-wrap gap-2">
       <div class="flex items-center space-x-3">
@@ -65,9 +68,9 @@
         </div>
         <div>
           <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            VolleyBalancer <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full">Pro DB</span>
+            VolleyBalancer <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"><i class="fa-solid fa-cloud text-[10px]"></i> Cloud DB</span>
           </h1>
-          <p class="text-xs text-slate-400 hidden sm:block">Gestione giocatori, storico partite e bilanciamento squadre</p>
+          <p class="text-xs text-slate-400 hidden sm:block">Sincronizzazione Cloud in tempo reale per le tue partite di pallavolo</p>
         </div>
       </div>
 
@@ -77,19 +80,17 @@
           <i class="fa-solid fa-users-viewfinder"></i> Generatore
         </button>
         <button id="nav-btn-history" onclick="switchNavTab('history')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
-          <i class="fa-solid fa-clock-rotate-left"></i> Storico Partite (<span id="history-count-badge">0</span>)
+          <i class="fa-solid fa-clock-rotate-left"></i> Storico Online (<span id="history-count-badge">0</span>)
         </button>
-        <button id="nav-btn-backup" onclick="switchNavTab('backup')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
-          <i class="fa-solid fa-database"></i> Backup &amp; DB
+        <button id="nav-btn-account" onclick="switchNavTab('account')" class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Stato Sincro
         </button>
       </nav>
 
-      <!-- Quick actions -->
-      <div class="flex items-center space-x-2">
-        <button onclick="loadSampleData()" class="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-orange-400 border border-orange-500/30 rounded-lg transition-all flex items-center gap-1.5">
-          <i class="fa-solid fa-wand-magic-sparkles"></i>
-          <span class="hidden md:inline">Dati Prova</span>
-        </button>
+      <!-- Connection / Sync Status Indicator -->
+      <div class="flex items-center space-x-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+        <span id="sync-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="sync-status-text" class="text-xs text-slate-300 font-medium">Connessione Cloud...</span>
       </div>
     </div>
   </header>
@@ -97,8 +98,29 @@
   <!-- Main Body Content -->
   <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <!-- Toast Notification Container -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+    <!-- Active User & Session Information Card -->
+    <div id="user-status-bar" class="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-lg">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+          <i class="fa-solid fa-user-gear text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-400">Account / ID Sincronizzazione:</span>
+            <span id="current-user-id" class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Inizializzazione...</span>
+          </div>
+          <p class="text-[11px] text-slate-500">I dati inseriti o modificati qui vengono subito aggiornati su tutti i dispositivi connessi a questo ID.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 w-full md:w-auto justify-end">
+        <button onclick="copyUserId()" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-copy"></i> Copia ID
+        </button>
+        <button onclick="loadSampleData()" class="px-3 py-1.5 text-xs font-semibold bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-lg transition-all flex items-center gap-1.5">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> Dati Prova Cloud
+        </button>
+      </div>
+    </div>
 
     <!-- ==================== TAB 1: GENERATORE & GESTIONE GIOCATORI ==================== -->
     <div id="nav-tab-content-generator" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -110,51 +132,51 @@
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
           <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
             <h2 class="text-base font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-user-plus text-orange-400"></i>
-              <span>1. Importazione &amp; Input Giocatori</span>
+              <i class="fa-solid fa-cloud-arrow-up text-orange-400"></i>
+              <span>1. Inserimento Giocatori Remoti</span>
             </h2>
           </div>
 
           <!-- Input Mode Tabs -->
           <div class="flex space-x-1 bg-slate-950 p-1 rounded-xl mb-4 border border-slate-800">
-            <button id="input-btn-file" onclick="switchInputTab('file')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all bg-blue-600 text-white shadow">
-              <i class="fa-solid fa-file-arrow-up"></i> Carica TXT
-            </button>
-            <button id="input-btn-manual" onclick="switchInputTab('manual')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white">
-              <i class="fa-solid fa-file-lines"></i> Testo
-            </button>
-            <button id="input-btn-quick" onclick="switchInputTab('quick')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white">
+            <button id="input-btn-quick" onclick="switchInputTab('quick')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all bg-blue-600 text-white shadow">
               <i class="fa-solid fa-plus"></i> Singolo
             </button>
-          </div>
-
-          <!-- Tab Content: File TXT -->
-          <div id="input-content-file" class="space-y-3">
-            <label for="txt-file-input" class="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-slate-700 hover:border-orange-500 rounded-xl cursor-pointer bg-slate-950/50 hover:bg-slate-950 transition-all text-center p-3">
-              <i class="fa-solid fa-file-import text-2xl text-slate-400 mb-1"></i>
-              <span class="text-xs font-semibold text-slate-300">Trascina o clicca per caricare un file TXT/CSV</span>
-              <span class="text-[10px] text-slate-500 mt-0.5">Esempio: "Marco Rossi, 8", "Giulia - 7.5", "Luca 6"</span>
-              <input id="txt-file-input" type="file" accept=".txt,.csv" class="hidden" onchange="handleFileUpload(event)">
-            </label>
-          </div>
-
-          <!-- Tab Content: Manual Text Area -->
-          <div id="input-content-manual" class="space-y-3 hidden">
-            <textarea id="raw-text-input" rows="5" placeholder="Incolla elenco qui, un giocatore per riga...&#10;Mario, 8&#10;Giulia - 7.5&#10;Luca Avanzato&#10;Paolo 5" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 font-mono custom-scrollbar"></textarea>
-            <button onclick="parseRawText()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow flex items-center justify-center gap-2">
-              <i class="fa-solid fa-arrow-down-short-wide"></i> Estrai ed Aggiungi al Database
+            <button id="input-btn-manual" onclick="switchInputTab('manual')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white">
+              <i class="fa-solid fa-file-lines"></i> Testo Multiplo
+            </button>
+            <button id="input-btn-file" onclick="switchInputTab('file')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-400 hover:text-white">
+              <i class="fa-solid fa-file-arrow-up"></i> Carica File TXT
             </button>
           </div>
 
           <!-- Tab Content: Quick Single -->
-          <div id="input-content-quick" class="space-y-3 hidden">
+          <div id="input-content-quick" class="space-y-3">
             <div class="grid grid-cols-3 gap-2">
               <input type="text" id="quick-name" placeholder="Nome cognome" class="col-span-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-orange-500">
               <input type="number" id="quick-level" min="1" max="10" step="0.5" value="6" placeholder="Livello (1-10)" class="bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-xs text-center text-amber-400 font-bold focus:outline-none focus:border-orange-500">
             </div>
             <button onclick="addSinglePlayer()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition-all shadow flex items-center justify-center gap-2">
-              <i class="fa-solid fa-user-plus"></i> Salva nel Database
+              <i class="fa-solid fa-cloud-arrow-up"></i> Salva Online
             </button>
+          </div>
+
+          <!-- Tab Content: Manual Text Area -->
+          <div id="input-content-manual" class="space-y-3 hidden">
+            <textarea id="raw-text-input" rows="4" placeholder="Incolla elenco qui, un giocatore per riga...&#10;Mario, 8&#10;Giulia - 7.5&#10;Luca 6" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 font-mono custom-scrollbar"></textarea>
+            <button onclick="parseRawText()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow flex items-center justify-center gap-2">
+              <i class="fa-solid fa-arrow-down-short-wide"></i> Invia Tutti al Database Online
+            </button>
+          </div>
+
+          <!-- Tab Content: File TXT -->
+          <div id="input-content-file" class="space-y-3 hidden">
+            <label for="txt-file-input" class="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-slate-700 hover:border-orange-500 rounded-xl cursor-pointer bg-slate-950/50 hover:bg-slate-950 transition-all text-center p-3">
+              <i class="fa-solid fa-file-import text-2xl text-slate-400 mb-1"></i>
+              <span class="text-xs font-semibold text-slate-300">Carica file TXT/CSV</span>
+              <span class="text-[10px] text-slate-500 mt-0.5">Es: "Marco Rossi, 8", "Giulia - 7.5"</span>
+              <input id="txt-file-input" type="file" accept=".txt,.csv" class="hidden" onchange="handleFileUpload(event)">
+            </label>
           </div>
 
         </div>
@@ -164,15 +186,14 @@
           <div class="flex items-center justify-between mb-3">
             <div>
               <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-users text-blue-400"></i>
-                <span>Database Giocatori (<span id="selected-count">0</span>)</span>
+                <i class="fa-solid fa-database text-blue-400"></i>
+                <span>Database Giocatori Online (<span id="selected-count">0</span>)</span>
               </h3>
-              <p class="text-[11px] text-slate-400" id="db-status-label">Stato DB: Inizializzazione...</p>
             </div>
             <div class="flex space-x-1">
               <button onclick="toggleSelectAll(true)" class="text-[10px] px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded">Tutti</button>
               <button onclick="toggleSelectAll(false)" class="text-[10px] px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded">Nessuno</button>
-              <button onclick="clearPlayerDatabase()" class="text-[10px] px-2 py-1 bg-red-950/50 hover:bg-red-900/60 text-red-300 border border-red-800/40 rounded">Svuota DB</button>
+              <button onclick="clearPlayerDatabase()" class="text-[10px] px-2 py-1 bg-red-950/50 hover:bg-red-900/60 text-red-300 border border-red-800/40 rounded">Svuota Online</button>
             </div>
           </div>
 
@@ -190,7 +211,7 @@
           </div>
 
           <!-- Dynamic Player List Container -->
-          <div id="players-list-container" class="flex-grow overflow-y-auto custom-scrollbar pr-1 space-y-2 min-h-[160px]">
+          <div id="players-list-container" class="flex-grow overflow-y-auto custom-scrollbar pr-1 space-y-2 min-h-[180px]">
             <!-- Rendered by JS -->
           </div>
         </div>
@@ -276,8 +297,8 @@
             <!-- Team Actions -->
             <div id="export-actions" class="flex flex-wrap items-center gap-2 hidden">
               <button onclick="saveCurrentMatchToHistory()" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all flex items-center gap-1.5 shadow">
-                <i class="fa-solid fa-bookmark"></i>
-                <span>Salva in Storico</span>
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+                <span>Salva nel Cloud</span>
               </button>
               <button onclick="copyTeamsToClipboard()" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-all flex items-center gap-1.5 shadow">
                 <i class="fa-solid fa-copy"></i>
@@ -300,32 +321,24 @@
           <!-- Dynamic Teams Grid -->
           <div id="teams-cards-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden"></div>
 
-          <!-- Bench Container -->
-          <div id="bench-cards-container" class="mt-4 pt-4 border-t border-slate-800 hidden">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-2">
-              <i class="fa-solid fa-chair"></i> Riserve / Panchina (<span id="bench-count">0</span>)
-            </h4>
-            <div id="bench-list" class="flex flex-wrap gap-2"></div>
-          </div>
-
         </div>
 
       </div>
 
     </div>
 
-    <!-- ==================== TAB 2: STORICO PARTITE SALVATE ==================== -->
+    <!-- ==================== TAB 2: STORICO PARTITE ONLINE ==================== -->
     <div id="nav-tab-content-history" class="hidden space-y-6">
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 mb-4 gap-2">
           <div>
             <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-clock-rotate-left text-orange-400"></i> Storico Partite &amp; Sessioni Salvate
+              <i class="fa-solid fa-clock-rotate-left text-orange-400"></i> Storico Partite Salvate nel Cloud
             </h2>
-            <p class="text-xs text-slate-400">Consulta, esporta o ripristina le squadre generate nelle sessioni precedenti.</p>
+            <p class="text-xs text-slate-400">Sincronizzato in tempo reale con il tuo database remoto.</p>
           </div>
           <button onclick="clearMatchHistory()" class="px-3 py-1.5 text-xs font-semibold bg-red-950/50 hover:bg-red-900/60 text-red-400 border border-red-800/40 rounded-lg transition-all self-start sm:self-auto flex items-center gap-1.5">
-            <i class="fa-solid fa-trash-can"></i> Svuota Storico
+            <i class="fa-solid fa-trash-can"></i> Svuota Storico Remoto
           </button>
         </div>
 
@@ -335,55 +348,35 @@
       </div>
     </div>
 
-    <!-- ==================== TAB 3: BACKUP & INTEGRITÀ DATABASE ==================== -->
-    <div id="nav-tab-content-backup" class="hidden space-y-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        <!-- Export Backup -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-          <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
-            <div class="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
-              <i class="fa-solid fa-file-export text-lg"></i>
-            </div>
-            <div>
-              <h3 class="text-base font-bold text-white">Esporta Database (Backup JSON)</h3>
-              <p class="text-xs text-slate-400">Scarica un file completo di giocatori e storico partite.</p>
-            </div>
-          </div>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Esportando il database in formato <code class="text-orange-400 font-mono">.json</code> puoi conservare una copia di sicurezza di tutti i tuoi giocatori con i rispettivi livelli e lo storico di tutti i match creati.
-          </p>
-          <button onclick="exportDatabaseJSON()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow flex items-center justify-center gap-2">
-            <i class="fa-solid fa-download"></i> Scarica Backup (.JSON)
-          </button>
+    <!-- ==================== TAB 3: STATO SINCRONIZZAZIONE ACCOUNT ==================== -->
+    <div id="nav-tab-content-account" class="hidden space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+        <div class="border-b border-slate-800 pb-4">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-network-wired text-emerald-400"></i> Gestione Cloud e Sincronizzazione Multi-Dispositivo
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Connetti altri smartphone o PC allo stesso ID per sincronizzare in tempo reale i dati del campo.</p>
         </div>
 
-        <!-- Import Backup -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-          <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
-            <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <i class="fa-solid fa-file-import text-lg"></i>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <h3 class="text-sm font-bold text-white">ID Utente Corrente (Firebase Auth)</h3>
+            <p class="text-xs text-slate-400">Questo codice identifica univocamente la tua raccolta cloud su Firestore.</p>
+            <div class="flex items-center space-x-2">
+              <input type="text" id="account-id-display" readonly class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-emerald-400">
+              <button onclick="copyUserId()" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold">Copia</button>
             </div>
-            <div>
-              <h3 class="text-base font-bold text-white">Importa Database (Restore JSON)</h3>
-              <p class="text-xs text-slate-400">Ripristina o unisci un file di backup salvato in precedenza.</p>
-            </div>
-          </div>
-          
-          <div>
-            <label for="json-file-input" class="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-xl cursor-pointer bg-slate-950/50 hover:bg-slate-950 transition-all text-center p-3">
-              <i class="fa-solid fa-upload text-xl text-slate-400 mb-1"></i>
-              <span class="text-xs font-semibold text-slate-300">Seleziona file JSON di Backup</span>
-              <input id="json-file-input" type="file" accept=".json" class="hidden" onchange="importDatabaseJSON(event)">
-            </label>
           </div>
 
-          <div class="flex items-center space-x-2 text-xs text-slate-400">
-            <input type="checkbox" id="import-merge-option" class="accent-orange-500 rounded">
-            <label for="import-merge-option" class="cursor-pointer">Unisci con i dati attuali (non sovrascrivere)</label>
+          <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <h3 class="text-sm font-bold text-white">Stato Database Firestore</h3>
+            <div class="flex items-center space-x-2 text-xs text-slate-300">
+              <i class="fa-solid fa-database text-emerald-400"></i>
+              <span>Collezione: <code class="font-mono text-orange-400">/artifacts/{appId}/users/{userId}</code></span>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">Qualsiasi aggiunta o modifica effettuata si riflette automaticamente e istantaneamente senza dover aggiornare manualmente la pagina.</p>
           </div>
         </div>
-
       </div>
     </div>
 
@@ -394,7 +387,7 @@
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
       <div class="flex justify-between items-center border-b border-slate-800 pb-3">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <i class="fa-solid fa-user-pen text-orange-400"></i> Modifica Giocatore nel DB
+          <i class="fa-solid fa-user-pen text-orange-400"></i> Modifica Giocatore Remoto
         </h3>
         <button onclick="closeEditModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
@@ -416,7 +409,7 @@
 
       <div class="flex justify-end space-x-2 pt-2 border-t border-slate-800">
         <button onclick="closeEditModal()" class="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all">Annulla</button>
-        <button onclick="savePlayerEdit()" class="px-4 py-2 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-slate-950 rounded-xl transition-all shadow">Aggiorna DB</button>
+        <button onclick="savePlayerEdit()" class="px-4 py-2 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-slate-950 rounded-xl transition-all shadow">Aggiorna Online</button>
       </div>
     </div>
   </div>
@@ -424,174 +417,206 @@
   <!-- Footer -->
   <footer class="bg-slate-950 border-t border-slate-900 py-4 mt-auto">
     <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-2">
-      <p>VolleyBalancer Pro &copy; 2026 - Database locale persistente in IndexedDB e LocalStorage.</p>
+      <p>VolleyBalancer Pro &copy; 2026 - Powered by Firebase Real-Time Firestore Cloud Storage.</p>
       <div class="flex items-center space-x-4">
-        <span class="flex items-center gap-1"><i class="fa-solid fa-database text-emerald-400"></i> Local Storage / IndexedDB</span>
+        <span class="flex items-center gap-1 text-emerald-400"><i class="fa-solid fa-cloud"></i> Cloud Live Sync</span>
       </div>
     </div>
   </footer>
 
-  <!-- Javascript Application Code -->
-  <script>
-    // ==========================================
-    // INDEXED DB / LOCAL STORAGE ENGINE
-    // ==========================================
-    const DB_NAME = "VolleyBalancerDB";
-    const DB_VERSION = 1;
-    let dbInstance = null;
+  <!-- Firebase JS SDK Imports & Main App Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { 
+      getAuth, 
+      signInAnonymously, 
+      signInWithCustomToken, 
+      onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { 
+      getFirestore, 
+      doc, 
+      setDoc, 
+      deleteDoc, 
+      collection, 
+      onSnapshot 
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    let state = {
+    // Application state
+    window.state = {
       players: [],
       history: []
     };
 
-    let currentGeneratedTeams = [];
-    let currentBench = [];
+    window.currentGeneratedTeams = [];
+    let db = null;
+    let auth = null;
+    let userId = null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'volley-balancer-app';
 
-    const TEAM_COLORS = [
-      { name: "Squadra Blu", border: "border-blue-500/60", bg: "bg-blue-950/30", header: "bg-blue-900/50", text: "text-blue-400", badge: "bg-blue-500/20 text-blue-300 border-blue-400/30" },
-      { name: "Squadra Arancione", border: "border-orange-500/60", bg: "bg-orange-950/30", header: "bg-orange-900/50", text: "text-orange-400", badge: "bg-orange-500/20 text-orange-300 border-orange-400/30" },
-      { name: "Squadra Verde", border: "border-emerald-500/60", bg: "bg-emerald-950/30", header: "bg-emerald-900/50", text: "text-emerald-400", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-400/30" },
-      { name: "Squadra Viola", border: "border-purple-500/60", bg: "bg-purple-950/30", header: "bg-purple-900/50", text: "text-purple-400", badge: "bg-purple-500/20 text-purple-300 border-purple-400/30" },
-      { name: "Squadra Gialla", border: "border-yellow-500/60", bg: "bg-yellow-950/30", header: "bg-yellow-900/50", text: "text-yellow-400", badge: "bg-yellow-500/20 text-yellow-300 border-yellow-400/30" }
-    ];
-
-    window.onload = function() {
-      // Prima carichiamo da LocalStorage per avere un avvio istantaneo e garantito
-      const localDataLoaded = loadFromLocalStorageFallback();
+    // 1. Initialize Firebase
+    try {
+      const firebaseConfig = JSON.parse(__firebase_config);
+      const app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
       
-      // Poi tentiamo la connessione asincrona a IndexedDB
-      initDatabase().then(() => {
-        loadDataFromStorage();
-      }).catch(err => {
-        console.warn("IndexedDB non disponibile, uso LocalStorage come fallback", err);
+      // Auth flow: custom token or anonymous login
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
+      } else {
+        signInAnonymously(auth);
+      }
+    } catch (e) {
+      console.error("Errore inizializzazione Firebase:", e);
+      updateSyncStatus("Errore Configurazione Cloud", false);
+    }
+
+    // 2. Auth State Observer
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        userId = user.uid;
+        document.getElementById('current-user-id').innerText = userId;
+        document.getElementById('account-id-display').value = userId;
+        updateSyncStatus("Connesso al Cloud", true);
+        
+        // Start real-time listeners for Firestore
+        subscribeToCloudData();
+      } else {
+        updateSyncStatus("Disconnesso", false);
+      }
+    });
+
+    function updateSyncStatus(text, isOnline) {
+      const dot = document.getElementById('sync-status-dot');
+      const textElem = document.getElementById('sync-status-text');
+      if (textElem) textElem.innerText = text;
+      if (dot) {
+        if (isOnline) {
+          dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+        } else {
+          dot.className = "w-2.5 h-2.5 rounded-full bg-red-500";
+        }
+      }
+    }
+
+    // 3. Real-time Firestore Listeners
+    function subscribeToCloudData() {
+      if (!userId || !db) return;
+
+      const playersColl = collection(db, 'artifacts', appId, 'users', userId, 'players');
+      const historyColl = collection(db, 'artifacts', appId, 'users', userId, 'history');
+
+      // Sync Players Collection in Real Time
+      onSnapshot(playersColl, (snapshot) => {
+        const cloudPlayers = [];
+        snapshot.forEach((doc) => {
+          cloudPlayers.push({ id: doc.id, ...doc.data() });
+        });
+        window.state.players = cloudPlayers;
+        window.renderPlayersList();
+      }, (error) => {
+        console.error("Errore sync giocatori:", error);
+        window.showToast("Errore sincronizzazione giocatori online", "error");
       });
+
+      // Sync History Collection in Real Time
+      onSnapshot(historyColl, (snapshot) => {
+        const cloudHistory = [];
+        snapshot.forEach((doc) => {
+          cloudHistory.push({ id: doc.id, ...doc.data() });
+        });
+        // Sort history by timestamp descending
+        cloudHistory.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        window.state.history = cloudHistory;
+        window.renderHistoryList();
+      }, (error) => {
+        console.error("Errore sync storico:", error);
+      });
+    }
+
+    // 4. Firestore Database Helper Functions
+    window.savePlayerToCloud = async function(player) {
+      if (!userId || !db) return;
+      try {
+        const ref = doc(db, 'artifacts', appId, 'users', userId, 'players', player.id);
+        await setDoc(ref, player);
+      } catch (err) {
+        console.error("Errore salvataggio giocatore:", err);
+        window.showToast("Impossibile salvare il giocatore online", "error");
+      }
     };
 
-    function initDatabase() {
-      return new Promise((resolve, reject) => {
-        if (!window.indexedDB) {
-          reject("IndexedDB not supported");
-          return;
-        }
-
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-        request.onupgradeneeded = function(e) {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains("players")) {
-            db.createObjectStore("players", { keyPath: "id" });
-          }
-          if (!db.objectStoreNames.contains("history")) {
-            db.createObjectStore("history", { keyPath: "id" });
-          }
-        };
-
-        request.onsuccess = function(e) {
-          dbInstance = e.target.result;
-          updateDbStatusLabel("IndexedDB (Attivo)");
-          resolve(dbInstance);
-        };
-
-        request.onerror = function(e) {
-          reject(e);
-        };
-      });
-    }
-
-    async function loadDataFromStorage() {
-      if (dbInstance) {
-        try {
-          const players = await getAllFromStore("players");
-          const history = await getAllFromStore("history");
-
-          if (players && players.length > 0) {
-            state.players = players;
-          }
-          if (history && history.length > 0) {
-            state.history = history;
-          }
-
-          renderPlayersList();
-          renderHistoryList();
-        } catch (e) {
-          console.error("Errore lettura IndexedDB", e);
-        }
+    window.deletePlayerFromCloud = async function(playerId) {
+      if (!userId || !db) return;
+      try {
+        const ref = doc(db, 'artifacts', appId, 'users', userId, 'players', playerId);
+        await deleteDoc(ref);
+      } catch (err) {
+        console.error("Errore eliminazione giocatore:", err);
       }
-    }
+    };
 
-    function saveStateToStorage() {
-      // 1. Salvataggio istantaneo in LocalStorage
-      localStorage.setItem("volley_balancer_state", JSON.stringify(state));
-
-      // 2. Sincronizzazione in IndexedDB
-      if (dbInstance) {
-        clearStore("players").then(() => {
-          state.players.forEach(p => addToStore("players", p));
-        });
-        clearStore("history").then(() => {
-          state.history.forEach(h => addToStore("history", h));
-        });
+    window.saveMatchToCloud = async function(matchRecord) {
+      if (!userId || !db) return;
+      try {
+        const ref = doc(db, 'artifacts', appId, 'users', userId, 'history', matchRecord.id);
+        await setDoc(ref, matchRecord);
+      } catch (err) {
+        console.error("Errore salvataggio match:", err);
+        window.showToast("Errore salvataggio partita nel cloud", "error");
       }
-    }
+    };
 
-    function loadFromLocalStorageFallback() {
-      updateDbStatusLabel("LocalStorage (Attivo)");
-      const saved = localStorage.getItem("volley_balancer_state");
-      if (saved) {
-        try {
-          state = JSON.parse(saved);
-          renderPlayersList();
-          renderHistoryList();
-          return true;
-        } catch (e) {
-          console.error(e);
-        }
+    window.deleteMatchFromCloud = async function(matchId) {
+      if (!userId || !db) return;
+      try {
+        const ref = doc(db, 'artifacts', appId, 'users', userId, 'history', matchId);
+        await deleteDoc(ref);
+      } catch (err) {
+        console.error("Errore eliminazione match:", err);
       }
+    };
+
+  </script>
+
+  <!-- UI & Application Logic Script -->
+  <script>
+    const TEAM_COLORS = [
+      { name: "Squadra Blu", border: "border-blue-500/60", text: "text-blue-400", badge: "bg-blue-500/20 text-blue-300 border-blue-400/30" },
+      { name: "Squadra Arancione", border: "border-orange-500/60", text: "text-orange-400", badge: "bg-orange-500/20 text-orange-300 border-orange-400/30" },
+      { name: "Squadra Verde", border: "border-emerald-500/60", text: "text-emerald-400", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-400/30" },
+      { name: "Squadra Viola", border: "border-purple-500/60", text: "text-purple-400", badge: "bg-purple-500/20 text-purple-300 border-purple-400/30" },
+      { name: "Squadra Gialla", border: "border-yellow-500/60", text: "text-yellow-400", badge: "bg-yellow-500/20 text-yellow-300 border-yellow-400/30" }
+    ];
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
       
-      // Se è la primissima volta in assoluto che l'utente apre il sito, carica dei dati di prova
-      if (!state.players || state.players.length === 0) {
-        loadSampleData(false);
+      let bgColors = "bg-emerald-600 text-white border-emerald-500";
+      let icon = "fa-circle-check";
+      if (type === 'error') {
+        bgColors = "bg-red-600 text-white border-red-500";
+        icon = "fa-triangle-exclamation";
+      } else if (type === 'info') {
+        bgColors = "bg-blue-600 text-white border-blue-500";
+        icon = "fa-circle-info";
       }
-      return false;
+
+      toast.className = `px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium flex items-center gap-2.5 border ${bgColors} transform translate-y-2 opacity-0 transition-all duration-300 pointer-events-auto`;
+      toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+      
+      container.appendChild(toast);
+      setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+      setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
     }
 
-    function updateDbStatusLabel(statusText) {
-      document.getElementById("db-status-label").innerText = `DB: ${statusText}`;
-    }
-
-    function getAllFromStore(storeName) {
-      return new Promise((resolve, reject) => {
-        const tx = dbInstance.transaction(storeName, "readonly");
-        const store = tx.objectStore(storeName);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    function addToStore(storeName, item) {
-      const tx = dbInstance.transaction(storeName, "readwrite");
-      const store = tx.objectStore(storeName);
-      store.put(item);
-    }
-
-    function clearStore(storeName) {
-      return new Promise((resolve, reject) => {
-        const tx = dbInstance.transaction(storeName, "readwrite");
-        const store = tx.objectStore(storeName);
-        const req = store.clear();
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    // ==========================================
-    // UI NAVIGATION TABS
-    // ==========================================
     function switchNavTab(tabName) {
-      const tabs = ['generator', 'history', 'backup'];
-      tabs.forEach(t => {
+      ['generator', 'history', 'account'].forEach(t => {
         const btn = document.getElementById(`nav-btn-${t}`);
         const content = document.getElementById(`nav-tab-content-${t}`);
         if (t === tabName) {
@@ -602,15 +627,10 @@
           content.classList.add('hidden');
         }
       });
-
-      if (tabName === 'history') {
-        renderHistoryList();
-      }
     }
 
     function switchInputTab(tabName) {
-      const tabs = ['file', 'manual', 'quick'];
-      tabs.forEach(t => {
+      ['file', 'manual', 'quick'].forEach(t => {
         const btn = document.getElementById(`input-btn-${t}`);
         const content = document.getElementById(`input-content-${t}`);
         if (t === tabName) {
@@ -625,10 +645,442 @@
 
     function toggleSplitModeUI() {
       const mode = document.getElementById('split-mode').value;
-      const numTeamsContainer = document.getElementById('num-teams-container');
-      const teamSizeContainer = document.getElementById('team-size-container');
-      if (mode === 'num_teams') {
-        numTeamsContainer.classList.remove('hidden');
-        teamSizeContainer.classList.add('hidden');
+      document.getElementById('num-teams-container').classList.toggle('hidden', mode !== 'num_teams');
+      document.getElementById('team-size-container').classList.toggle('hidden', mode === 'num_teams');
+    }
+
+    function loadSampleData() {
+      const samplePlayers = [
+        { id: 'p1', name: "Marco Rossi", level: 8.5, selected: true },
+        { id: 'p2', name: "Giulia Bianchi", level: 8.0, selected: true },
+        { id: 'p3', name: "Luca Verdi", level: 7.5, selected: true },
+        { id: 'p4', name: "Sofia Neri", level: 7.0, selected: true },
+        { id: 'p5', name: "Alessandro Gialli", level: 7.0, selected: true },
+        { id: 'p6', name: "Martina Blu", level: 6.5, selected: true },
+        { id: 'p7', name: "Davide Rossi", level: 6.5, selected: true },
+        { id: 'p8', name: "Elena Ferrari", level: 6.0, selected: true },
+        { id: 'p9', name: "Matteo Esposito", level: 5.5, selected: true },
+        { id: 'p10', name: "Sara Romano", level: 5.5, selected: true },
+        { id: 'p11', name: "Federico Colombo", level: 5.0, selected: true },
+        { id: 'p12', name: "Chiara Ricci", level: 4.5, selected: true }
+      ];
+
+      samplePlayers.forEach(p => window.savePlayerToCloud(p));
+      showToast("Inviati 12 giocatori di prova al Database Online!");
+    }
+
+    function renderPlayersList() {
+      const container = document.getElementById('players-list-container');
+      if (!container) return;
+
+      const search = (document.getElementById('player-search')?.value || '').toLowerCase();
+      const sortVal = document.getElementById('player-sort')?.value || 'level_desc';
+
+      let filtered = (window.state.players || []).filter(p => p.name.toLowerCase().includes(search));
+
+      filtered.sort((a, b) => {
+        if (sortVal === 'name_asc') return a.name.localeCompare(b.name);
+        if (sortVal === 'level_desc') return b.level - a.level;
+        if (sortVal === 'level_asc') return a.level - b.level;
+        return 0;
+      });
+
+      let selectedCount = (window.state.players || []).filter(p => p.selected).length;
+      document.getElementById('selected-count').innerText = `${selectedCount}/${window.state.players.length}`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center py-8 text-slate-500 text-xs">Nessun giocatore presente nel cloud.</div>`;
+        return;
+      }
+
+      let html = '';
+      filtered.forEach(p => {
+        let badgeColor = "text-amber-400 bg-amber-500/10 border-amber-500/20";
+        if (p.level >= 8) badgeColor = "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+        else if (p.level <= 4.5) badgeColor = "text-slate-400 bg-slate-800 border-slate-700";
+
+        html += `
+          <div class="flex items-center justify-between p-2.5 bg-slate-950 border border-slate-800/80 rounded-xl hover:border-slate-700 transition-all">
+            <div class="flex items-center space-x-2.5">
+              <input type="checkbox" ${p.selected ? 'checked' : ''} onchange="togglePlayerSelection('${p.id}')" class="w-4 h-4 rounded accent-orange-500 cursor-pointer">
+              <span class="text-xs font-semibold text-slate-200">${escapeHtml(p.name)}</span>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${badgeColor}">Lv. ${p.level}</span>
+              <button onclick="openEditModal('${p.id}')" class="text-slate-500 hover:text-slate-300 p-1"><i class="fa-solid fa-pen text-[11px]"></i></button>
+              <button onclick="deletePlayer('${p.id}')" class="text-slate-600 hover:text-red-400 p-1"><i class="fa-solid fa-trash text-[11px]"></i></button>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function togglePlayerSelection(id) {
+      const p = window.state.players.find(x => x.id === id);
+      if (p) {
+        p.selected = !p.selected;
+        window.savePlayerToCloud(p);
+      }
+    }
+
+    function toggleSelectAll(select) {
+      window.state.players.forEach(p => {
+        p.selected = select;
+        window.savePlayerToCloud(p);
+      });
+      showToast(select ? "Tutti selezionati online" : "Tutti deselezionati online", "info");
+    }
+
+    function addSinglePlayer() {
+      const nameInput = document.getElementById('quick-name');
+      const levelInput = document.getElementById('quick-level');
+      const name = nameInput.value.trim();
+      const level = parseFloat(levelInput.value);
+
+      if (!name) {
+        showToast("Inserisci un nome valido", "error");
+        return;
+      }
+
+      const newPlayer = {
+        id: 'p_' + Date.now() + Math.random().toString(36).substring(2, 5),
+        name: name,
+        level: isNaN(level) ? 6.0 : Math.max(1, Math.min(10, level)),
+        selected: true
+      };
+
+      window.savePlayerToCloud(newPlayer);
+      nameInput.value = '';
+      showToast(`Giocatore "${name}" salvato nel Cloud!`);
+    }
+
+    function parseRawText() {
+      const text = document.getElementById('raw-text-input').value.trim();
+      if (!text) return;
+
+      const lines = text.split('\n');
+      lines.forEach(line => {
+        line = line.trim();
+        if (!line) return;
+
+        let name = line;
+        let level = 6.0;
+        const match = line.match(/^(.+?)(?:[\,\;\-\:]\s*|\s+)(\d+(?:\.\d+)?)$/);
+        if (match) {
+          name = match[1].trim();
+          let parsedLv = parseFloat(match[2]);
+          if (!isNaN(parsedLv)) level = Math.max(1, Math.min(10, parsedLv));
+        }
+
+        window.savePlayerToCloud({
+          id: 'p_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+          name: name,
+          level: level,
+          selected: true
+        });
+      });
+
+      document.getElementById('raw-text-input').value = '';
+      showToast("Giocatori inviati al database online!");
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('raw-text-input').value = e.target.result;
+        switchInputTab('manual');
+        parseRawText();
+      };
+      reader.readAsText(file);
+    }
+
+    function deletePlayer(id) {
+      window.deletePlayerFromCloud(id);
+      showToast("Giocatore rimosso dal Cloud", "info");
+    }
+
+    function clearPlayerDatabase() {
+      if (confirm("Vuoi cancellare TUTTI i giocatori dal database online?")) {
+        window.state.players.forEach(p => window.deletePlayerFromCloud(p.id));
+        showToast("Database online svuotato", "info");
+      }
+    }
+
+    function openEditModal(id) {
+      const p = window.state.players.find(x => x.id === id);
+      if (!p) return;
+
+      document.getElementById('edit-player-id').value = p.id;
+      document.getElementById('edit-player-name').value = p.name;
+      document.getElementById('edit-player-level-range').value = p.level;
+      document.getElementById('edit-player-level-num').value = p.level;
+      document.getElementById('edit-modal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+    }
+
+    function syncModalLevelInput(val) {
+      document.getElementById('edit-player-level-num').value = val;
+    }
+
+    function syncModalLevelRange(val) {
+      document.getElementById('edit-player-level-range').value = val;
+    }
+
+    function savePlayerEdit() {
+      const id = document.getElementById('edit-player-id').value;
+      const name = document.getElementById('edit-player-name').value.trim();
+      const level = parseFloat(document.getElementById('edit-player-level-num').value);
+
+      if (!name) return;
+
+      const p = window.state.players.find(x => x.id === id);
+      if (p) {
+        p.name = name;
+        p.level = isNaN(level) ? 6.0 : Math.max(1, Math.min(10, level));
+        window.savePlayerToCloud(p);
+        closeEditModal();
+        showToast("Giocatore aggiornato sul Cloud!");
+      }
+    }
+
+    function generateTeams() {
+      const activePlayers = (window.state.players || []).filter(p => p.selected);
+      if (activePlayers.length < 2) {
+        showToast("Seleziona almeno 2 giocatori attivi per generare le squadre!", "error");
+        return;
+      }
+
+      const splitMode = document.getElementById('split-mode').value;
+      let numTeams = 2;
+
+      if (splitMode === 'num_teams') {
+        numTeams = parseInt(document.getElementById('num-teams-select').value);
       } else {
-        num
+        const teamSize = parseInt(document.getElementById('team-size-select').value);
+        numTeams = Math.max(2, Math.floor(activePlayers.length / teamSize));
+      }
+
+      const algo = document.getElementById('algo-select').value;
+      let pool = [...activePlayers].sort((a, b) => b.level - a.level);
+      
+      let teams = Array.from({ length: numTeams }, (_, i) => ({
+        id: i,
+        name: TEAM_COLORS[i % TEAM_COLORS.length].name,
+        color: TEAM_COLORS[i % TEAM_COLORS.length],
+        players: [],
+        totalLevel: 0,
+        avgLevel: 0
+      }));
+
+      if (algo === 'snake') {
+        let direction = 1;
+        let teamIdx = 0;
+        pool.forEach((player) => {
+          teams[teamIdx].players.push(player);
+          teamIdx += direction;
+          if (teamIdx >= numTeams) {
+            teamIdx = numTeams - 1;
+            direction = -1;
+          } else if (teamIdx < 0) {
+            teamIdx = 0;
+            direction = 1;
+          }
+        });
+      } else if (algo === 'greedy') {
+        pool.forEach(player => {
+          teams.sort((a, b) => a.totalLevel - b.totalLevel);
+          teams[0].players.push(player);
+          teams[0].totalLevel = teams[0].players.reduce((sum, p) => sum + p.level, 0);
+        });
+      } else {
+        let shuffled = pool.sort(() => Math.random() - 0.5);
+        shuffled.forEach((player, idx) => {
+          teams[idx % numTeams].players.push(player);
+        });
+      }
+
+      teams.forEach(t => {
+        t.totalLevel = parseFloat(t.players.reduce((sum, p) => sum + p.level, 0).toFixed(1));
+        t.avgLevel = t.players.length > 0 ? parseFloat((t.totalLevel / t.players.length).toFixed(1)) : 0;
+      });
+
+      window.currentGeneratedTeams = teams;
+      renderGeneratedTeamsOutput();
+      showToast("Squadre generate!");
+    }
+
+    function renderGeneratedTeamsOutput() {
+      const emptyState = document.getElementById('teams-empty-state');
+      const cardsContainer = document.getElementById('teams-cards-container');
+      const exportActions = document.getElementById('export-actions');
+      const matchSummary = document.getElementById('match-summary');
+
+      emptyState.classList.add('hidden');
+      cardsContainer.classList.remove('hidden');
+      exportActions.classList.remove('hidden');
+
+      let totalPlayersCount = window.currentGeneratedTeams.reduce((acc, t) => acc + t.players.length, 0);
+      matchSummary.innerText = `${window.currentGeneratedTeams.length} Squadre create | ${totalPlayersCount} Giocatori in campo`;
+
+      let html = '';
+      window.currentGeneratedTeams.forEach((t) => {
+        let playersHtml = '';
+        t.players.forEach(p => {
+          playersHtml += `
+            <div class="flex items-center justify-between py-1.5 px-2.5 bg-slate-950/60 border border-slate-800/60 rounded-xl">
+              <span class="text-xs font-medium text-slate-200">${escapeHtml(p.name)}</span>
+              <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-amber-400 border border-slate-800">Lv. ${p.level}</span>
+            </div>
+          `;
+        });
+
+        html += `
+          <div class="bg-slate-950 border ${t.color.border} rounded-2xl p-4 shadow-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                <h3 class="text-sm font-bold ${t.color.text} flex items-center gap-2">
+                  <i class="fa-solid fa-shield"></i> ${escapeHtml(t.name)}
+                </h3>
+                <span class="text-[11px] font-bold px-2.5 py-1 rounded-xl border ${t.color.badge}">
+                  Tot: ${t.totalLevel} (Med: ${t.avgLevel})
+                </span>
+              </div>
+              <div class="space-y-1.5 max-h-[220px] overflow-y-auto custom-scrollbar pr-1">
+                ${playersHtml}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      cardsContainer.innerHTML = html;
+    }
+
+    function copyTeamsToClipboard() {
+      if (!window.currentGeneratedTeams || window.currentGeneratedTeams.length === 0) return;
+
+      let text = `🏐 *FORMAZIONI VOLLEYBALANCER PRO* 🏐\n\n`;
+      window.currentGeneratedTeams.forEach(t => {
+        text += `🛡️ *${t.name}* (Tot: ${t.totalLevel} | Med: ${t.avgLevel})\n`;
+        t.players.forEach(p => {
+          text += `• ${p.name} (Lv. ${p.level})\n`;
+        });
+        text += `\n`;
+      });
+
+      document.execCommand && navigator.clipboard.writeText(text).then(() => {
+        showToast("Formazioni copiate negli appunti!");
+      }).catch(() => {
+        showToast("Errore durante la copia", "error");
+      });
+    }
+
+    function exportToPDF() {
+      const element = document.getElementById('output-wrapper');
+      const opt = {
+        margin: 10,
+        filename: `Formazioni_Volley_${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#0f172a' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().from(element).set(opt).save().then(() => showToast("PDF Esportato!"));
+    }
+
+    function saveCurrentMatchToHistory() {
+      if (!window.currentGeneratedTeams || window.currentGeneratedTeams.length === 0) {
+        showToast("Genera prima le squadre!", "error");
+        return;
+      }
+
+      const matchRecord = {
+        id: 'match_' + Date.now(),
+        timestamp: Date.now(),
+        date: new Date().toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' }),
+        teams: JSON.parse(JSON.stringify(window.currentGeneratedTeams))
+      };
+
+      window.saveMatchToCloud(matchRecord);
+      showToast("Partita salvata nel Cloud con successo!");
+      switchNavTab('history');
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('history-list-container');
+      const badge = document.getElementById('history-count-badge');
+      const historyArr = window.state.history || [];
+
+      if (badge) badge.innerText = historyArr.length;
+      if (!container) return;
+
+      if (historyArr.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500">
+            <i class="fa-solid fa-cloud-arrow-up text-3xl mb-2 text-slate-700"></i>
+            <p class="text-sm font-medium text-slate-400">Nessuna partita nello storico cloud.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      historyArr.forEach((match) => {
+        let teamsSummary = '';
+        match.teams.forEach(t => {
+          let names = t.players.map(p => p.name).join(', ');
+          teamsSummary += `
+            <div class="text-xs py-1 border-b border-slate-800/60 last:border-0">
+              <span class="font-bold text-orange-400">${escapeHtml(t.name)}</span> (Tot: ${t.totalLevel}): <span class="text-slate-300">${escapeHtml(names)}</span>
+            </div>
+          `;
+        });
+
+        html += `
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span class="text-xs font-bold text-slate-400 flex items-center gap-1.5"><i class="fa-solid fa-calendar-days text-orange-400"></i> ${match.date}</span>
+              <button onclick="deleteMatchHistory('${match.id}')" class="text-xs text-red-400 hover:text-red-300"><i class="fa-solid fa-trash"></i> Elimina</button>
+            </div>
+            <div class="space-y-1">
+              ${teamsSummary}
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function deleteMatchHistory(id) {
+      window.deleteMatchFromCloud(id);
+      showToast("Partita eliminata dal Cloud", "info");
+    }
+
+    function clearMatchHistory() {
+      if (confirm("Vuoi cancellare tutto lo storico delle partite salvato nel Cloud?")) {
+        (window.state.history || []).forEach(m => window.deleteMatchFromCloud(m.id));
+        showToast("Storico salvato sul cloud svuotato", "info");
+      }
+    }
+
+    function copyUserId() {
+      const id = document.getElementById('account-id-display').value;
+      if (!id) return;
+      document.execCommand && navigator.clipboard.writeText(id).then(() => {
+        showToast("ID Sincronizzazione copiato negli appunti!");
+      });
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
