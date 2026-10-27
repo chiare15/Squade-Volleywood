@@ -1279,22 +1279,87 @@ Tommaso Barbieri, 3.5`;
                 .replace(/'/g, "&#039;");
     }
   </script>
+
+<!-- ========================================== -->
+  <!-- FIREBASE CLOUD INTEGRATION & APP LOGIC    -->
+  <!-- ========================================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      setDoc,
+      doc,
+      deleteDoc,
+      getDocs, 
+      onSnapshot 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // LA TUA CONFIGURAZIONE CORRETTA
+    const firebaseConfig = {
+      apiKey: "AIzaSyBJDV3Ur23RkH8DJ3J-_44UUEuV2ixQFwk",
+      authDomain: "volleyball-teams-37a45.firebaseapp.com",
+      projectId: "volleyball-teams-37a45",
+      storageBucket: "volleyball-teams-37a45.firebasestorage.app",
+      messagingSenderId: "500195536206",
+      appId: "1:500195536206:web:8c1e56eace9790371c021f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.state = {
+      players: [],
+      history: []
+    };
+
+    let currentGeneratedTeams = [];
+    let currentBench = [];
+
+    const TEAM_COLORS = [
+      { name: "Squadra Blu", border: "border-blue-500/60", bg: "bg-blue-950/30", header: "bg-blue-900/50", text: "text-blue-400", badge: "bg-blue-500/20 text-blue-300 border-blue-400/30" },
+      { name: "Squadra Arancione", border: "border-orange-500/60", bg: "bg-orange-950/30", header: "bg-orange-900/50", text: "text-orange-400", badge: "bg-orange-500/20 text-orange-300 border-orange-400/30" },
+      { name: "Squadra Verde", border: "border-emerald-500/60", bg: "bg-emerald-950/30", header: "bg-emerald-900/50", text: "text-emerald-400", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-400/30" },
+      { name: "Squadra Viola", border: "border-purple-500/60", bg: "bg-purple-950/30", header: "bg-purple-900/50", text: "text-purple-400", badge: "bg-purple-500/20 text-purple-300 border-purple-400/30" },
+      { name: "Squadra Gialla", border: "border-yellow-500/60", bg: "bg-yellow-950/30", header: "bg-yellow-900/50", text: "text-yellow-400", badge: "bg-yellow-500/20 text-yellow-300 border-yellow-400/30" }
+    ];
+
+    // Sincronizzazione Cloud pulita (senza ricaricamento forzato dei campioni)
+    function initCloudSync() {
+      document.getElementById("db-status-label").innerText = "DB: Firebase Cloud (Live)";
+      
+      onSnapshot(collection(db, "players"), (snapshot) => {
+        const players = [];
+        snapshot.forEach((d) => {
+          players.push({ id: d.id, ...d.data() });
+        });
+        window.state.players = players;
+        renderPlayersList();
+      });
+
+      onSnapshot(collection(db, "history"), (snapshot) => {
+        const history = [];
+        snapshot.forEach((d) => {
+          history.push({ id: d.id, ...d.data() });
+        });
+        window.state.history = history;
+        renderHistoryList();
+      });
+    }
+
+    window.initCloudSync = initCloudSync;
+    window.db = db;
+    window.collection = collection;
+    window.setDoc = setDoc;
+    window.doc = doc;
+    window.deleteDoc = deleteDoc;
+    window.addDoc = addDoc;
+
+    window.onload = function() {
+      initCloudSync();
+    };
+  </script>
+
 </body>
 </html>
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyBJDV3Ur23RkH8DJ3J-_44UUEuV2ixQFwk",
-  authDomain: "volleyball-teams-37a45.firebaseapp.com",
-  projectId: "volleyball-teams-37a45",
-  storageBucket: "volleyball-teams-37a45.firebasestorage.app",
-  messagingSenderId: "500195536206",
-  appId: "1:500195536206:web:8c1e56eace9790371c021f"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
